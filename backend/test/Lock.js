@@ -1,128 +1,88 @@
-import {
-  time,
-  loadFixture,
-} from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
-import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs.js";
-import chai from "chai";
+import pkg from "hardhat";
+const { ethers } = pkg;
+import { expect } from "chai";
+import { time } from "@nomicfoundation/hardhat-network-helpers";
 
-const { expect } = chai;
+describe("PaymentGateway Deep Grind", function () {
+  let gateway, mockUSDT, owner, alice, bob;
+  const FEE_BPS = 200; // 2% fee
 
-describe("Lock", function () {
-  // We define a fixture to reuse the same setup in every test.
-  // We use loadFixture to run this setup once, snapshot that state,
-  // and reset Hardhat Network to that snapshot in every test.
-  async function deployOneYearLockFixture() {
-    const ONE_YEAR_IN_SECS = 365 * 24 * 60 * 60;
-    const ONE_GWEI = 1_000_000_000;
+  beforeEach(async function () {
+    [owner, alice, bob] = await ethers.getSigners();
 
-    const lockedAmount = ONE_GWEI;
-    const unlockTime = (await time.latest()) + ONE_YEAR_IN_SECS;
+    // 1. Deploy Gateway
+    const GatewayFactory = await ethers.getContractFactory("PaymentGateway");
+    gateway = await GatewayFactory.deploy(FEE_BPS);
 
-    // Contracts are deployed using the first signer/account by default
-    const [owner, otherAccount] = await ethers.getSigners();
+    // 2. Deploy Mock Token for Testing
+    const MockTokenFactory = await ethers.getContractFactory("MockToken");
+    mockUSDT = await MockTokenFactory.deploy();
+    
+    // Give Alice some tokens and approve the gateway
+    await mockUSDT.mint(alice.address, ethers.parseUnits("1000", 18));
+    await mockUSDT.connect(alice).approve(gateway.target, ethers.parseUnits("1000", 18));
+  });
 
-    const Lock = await ethers.getContractFactory("Lock");
-    const lock = await Lock.deploy(unlockTime, { value: lockedAmount });
+  describe("Payment Logic", function () {
+    it("Should record ETH payment with correct fee math", async function () {
+      const payAmount = ethers.parseEther("10");
+      await gateway.connect(alice).payETH({ value: payAmount });
 
-    return { lock, unlockTime, lockedAmount, owner, otherAccount };
-  }
-
-  describe("Deployment", function () {
-    it("Should set the right unlockTime", async function () {
-      const { lock, unlockTime } = await loadFixture(deployOneYearLockFixture);
-
-      expect(await lock.unlockTime()).to.equal(unlockTime);
+      const p = await gateway.payments(alice.address, 0);
+      expect(p.amount).to.equal(ethers.parseEther("9.8")); // 10 - 2%
+      expect(p.fees).to.equal(ethers.parseEther("0.2"));
     });
 
-    it("Should set the right owner", async function () {
-      const { lock, owner } = await loadFixture(deployOneYearLockFixture);
+    it("Should pull ERC20 tokens from user", async function () {
+      const amount = ethers.parseUnits("100", 18);
+      await gateway.connect(alice).payERC20(mockUSDT.target, amount);
 
-      expect(await lock.owner()).to.equal(owner.address);
-    });
-
-    it("Should receive and store the funds to lock", async function () {
-      const { lock, lockedAmount } = await loadFixture(
-        deployOneYearLockFixture,
-      );
-
-      expect(await ethers.provider.getBalance(lock.target)).to.equal(
-        lockedAmount,
-      );
-    });
-
-    it("Should fail if the unlockTime is not in the future", async function () {
-      // We don't use the fixture here because we want a different deployment
-      const latestTime = await time.latest();
-      const Lock = await ethers.getContractFactory("Lock");
-      await expect(Lock.deploy(latestTime, { value: 1 })).to.be.revertedWith(
-        "Unlock time should be in the future",
-      );
+      expect(await mockUSDT.balanceOf(gateway.target)).to.equal(amount);
     });
   });
 
-  describe("Withdrawals", function () {
-    describe("Validations", function () {
-      it("Should revert with the right error if called too soon", async function () {
-        const { lock } = await loadFixture(deployOneYearLockFixture);
-
-        await expect(lock.withdraw()).to.be.revertedWith(
-          "You can't withdraw yet",
-        );
-      });
-
-      it("Should revert with the right error if called from another account", async function () {
-        const { lock, unlockTime, otherAccount } = await loadFixture(
-          deployOneYearLockFixture,
-        );
-
-        // We can increase the time in Hardhat Network
-        await time.increaseTo(unlockTime);
-
-        // We use lock.connect() to send a transaction from another account
-        await expect(lock.connect(otherAccount).withdraw()).to.be.revertedWith(
-          "You aren't the owner",
-        );
-      });
-
-      it("Shouldn't fail if the unlockTime has arrived and the owner calls it", async function () {
-        const { lock, unlockTime } = await loadFixture(
-          deployOneYearLockFixture,
-        );
-
-        // Transactions are sent using the first signer by default
-        await time.increaseTo(unlockTime);
-
-        await expect(lock.withdraw()).not.to.be.reverted;
-      });
+  describe("Escrow & Security", function () {
+    it("Should allow user to refund BEFORE 24 hours", async function () {
+      await gateway.connect(alice).payETH({ value: ethers.parseEther("1") });
+      
+      // Alice calls refund
+      await expect(gateway.connect(alice).Refunded(0))
+        .to.emit(gateway, "refunded");
     });
 
-    describe("Events", function () {
-      it("Should emit an event on withdrawals", async function () {
-        const { lock, unlockTime, lockedAmount } = await loadFixture(
-          deployOneYearLockFixture,
-        );
-
-        await time.increaseTo(unlockTime);
-
-        await expect(lock.withdraw())
-          .to.emit(lock, "Withdrawal")
-          .withArgs(lockedAmount, anyValue); // We accept any value as `when` arg
-      });
+    it("Should REVERT if owner tries to withdraw before 24 hours", async function () {
+      await gateway.connect(alice).payETH({ value: ethers.parseEther("1") });
+      
+      await expect(gateway.connect(owner).WithDraw(alice.address, 0))
+        .to.be.revertedWith("Escrow Still active----");
     });
 
-    describe("Transfers", function () {
-      it("Should transfer the funds to the owner", async function () {
-        const { lock, unlockTime, lockedAmount, owner } = await loadFixture(
-          deployOneYearLockFixture,
-        );
+    it("Should allow batch withdrawal after 24 hours", async function () {
+      // 1. Alice pays 1 ETH and 100 USDT
+      await gateway.connect(alice).payETH({ value: ethers.parseEther("1") });
+      await gateway.connect(alice).payERC20(mockUSDT.target, ethers.parseUnits("100", 18));
 
-        await time.increaseTo(unlockTime);
+      // 2. Fast forward 25 hours
+      await time.increase(25 * 3600);
 
-        await expect(lock.withdraw()).to.changeEtherBalances(
-          [owner, lock],
-          [lockedAmount, -lockedAmount],
-        );
-      });
+      // 3. Owner withdraws all Alice's payments
+      const initialEthBal = await ethers.provider.getBalance(owner.address);
+      await gateway.connect(owner).withDrawAll([0, 1], alice.address);
+
+      // 4. Check results
+      expect(await mockUSDT.balanceOf(owner.address)).to.equal(ethers.parseUnits("100", 18));
+      const finalEthBal = await ethers.provider.getBalance(owner.address);
+      expect(finalEthBal).to.be.gt(initialEthBal);
+    });
+  });
+
+  describe("Access Control", function () {
+    it("Should not let Bob withdraw Alice's money", async function () {
+       await gateway.connect(alice).payETH({ value: ethers.parseEther("1") });
+       await time.increase(25 * 3600);
+       
+       await expect(gateway.connect(bob).WithDraw(alice.address, 0))
+         .to.be.revertedWith("You are not the owner");
     });
   });
 });
