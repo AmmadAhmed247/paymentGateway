@@ -95,7 +95,7 @@ contract PaymentGateway is ReentrancyGuard{
     Payment storage p=payments[customer][_index];
     require(!p.refunded,"Payment Refunded");
     require(!p.withdrawn,"Already WithDraw");
-    require(block.timestamp> p.timestamp+ESCROW_TIME,"Escrow Still active----");
+    require(block.timestamp> p.timestamp+ESCROW_TIME,"Escrow still active");
     p.withdrawn=true;
     uint256 total=p.amount+p.fees;
     if(p.token==address(0)){
@@ -107,6 +107,9 @@ contract PaymentGateway is ReentrancyGuard{
     emit withdraw(owner, p.token, total);
     }
   }
+  function getCustomerPayments(address _customer) external view returns (Payment[] memory) {
+    return payments[_customer];
+}
 
   function withDrawAll(uint256[] calldata indices,address customer )external onlyOwner nonReentrant{
     uint256 totalETHToWithDraw=0;

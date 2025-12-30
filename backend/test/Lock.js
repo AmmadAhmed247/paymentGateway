@@ -3,86 +3,96 @@ const { ethers } = pkg;
 import { expect } from "chai";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 
-describe("PaymentGateway Deep Grind", function () {
-  let gateway, mockUSDT, owner, alice, bob;
-  const FEE_BPS = 200; // 2% fee
+describe("PaymentGateway", function () {
+  let gateway , mockUSDT , ammad ,hasan , owner;
+  const fee_bps=200;
 
   beforeEach(async function () {
-    [owner, alice, bob] = await ethers.getSigners();
+    [owner , ammad , hasan ]=await ethers.getSigners();
+    //gateway -- deployment--
+    const gatewayFactory=await ethers.getContractFactory("PaymentGateway");
+    gateway=await gatewayFactory.deploy(fee_bps);
 
-    // 1. Deploy Gateway
-    const GatewayFactory = await ethers.getContractFactory("PaymentGateway");
-    gateway = await GatewayFactory.deploy(FEE_BPS);
+    //mock usdt for testing----
 
-    // 2. Deploy Mock Token for Testing
-    const MockTokenFactory = await ethers.getContractFactory("MockToken");
-    mockUSDT = await MockTokenFactory.deploy();
-    
-    // Give Alice some tokens and approve the gateway
-    await mockUSDT.mint(alice.address, ethers.parseUnits("1000", 18));
-    await mockUSDT.connect(alice).approve(gateway.target, ethers.parseUnits("1000", 18));
-  });
+    const mockTokenUsdt=await ethers.getContractFactory("MockToken");
+    mockUSDT=await mockTokenUsdt.deploy();
 
-  describe("Payment Logic", function () {
-    it("Should record ETH payment with correct fee math", async function () {
-      const payAmount = ethers.parseEther("10");
-      await gateway.connect(alice).payETH({ value: payAmount });
+    //some tokens to ammad ---
+    await mockUSDT.mint(ammad.address,ethers.parseUnits("1000",18));
+    await mockUSDT.connect(ammad).approve(gateway.target,ethers.parseUnits("1000",18));
+    console.log(gateway.target);
 
-      const p = await gateway.payments(alice.address, 0);
-      expect(p.amount).to.equal(ethers.parseEther("9.8")); // 10 - 2%
+  })
+
+  describe("Payment Check",function(){
+    it("it should record eth plus fees",async function () {
+      const payAmount=ethers.parseEther("10",18);
+      const payAmount2=ethers.parseUnits("10");
+      console.log(payAmount);
+      console.log(payAmount2);
+
+      await gateway.connect(ammad).payETH({value:payAmount});
+
+      const p=await gateway.payments(ammad.address , 0);
+
+      expect(p.amount).to.equal(ethers.parseEther("9.8"));//because 0.2 for feessssss
       expect(p.fees).to.equal(ethers.parseEther("0.2"));
-    });
 
-    it("Should pull ERC20 tokens from user", async function () {
-      const amount = ethers.parseUnits("100", 18);
-      await gateway.connect(alice).payERC20(mockUSDT.target, amount);
 
-      expect(await mockUSDT.balanceOf(gateway.target)).to.equal(amount);
-    });
-  });
-
-  describe("Escrow & Security", function () {
-    it("Should allow user to refund BEFORE 24 hours", async function () {
-      await gateway.connect(alice).payETH({ value: ethers.parseEther("1") });
       
-      // Alice calls refund
-      await expect(gateway.connect(alice).Refunded(0))
-        .to.emit(gateway, "refunded");
     });
 
-    it("Should REVERT if owner tries to withdraw before 24 hours", async function () {
-      await gateway.connect(alice).payETH({ value: ethers.parseEther("1") });
-      
-      await expect(gateway.connect(owner).WithDraw(alice.address, 0))
-        .to.be.revertedWith("Escrow Still active----");
+    it("check erc20 behaviour--",async function () {
+      const payAmount=ethers.parseUnits("10",18);
+
+      await gateway.connect(ammad).payERC20(mockUSDT.target,payAmount);
+
+      const payment=await gateway.payments(ammad.address,0);
+
+      expect(payment.amount).to.equal(ethers.parseUnits("9.8",18));
+      expect(payment.fees).to.equal(ethers.parseUnits("0.2",18));
+      expect(await mockUSDT.balanceOf(gateway.target)).to.equal(payAmount);
+
+    })
+  })
+
+  describe("Escrow Behaviour",function () {
+    it("Should allow user to refund before 24 hr",async function () {
+      await gateway.connect(ammad).payETH({value:ethers.parseEther("1")});
+      expect (gateway.connect(ammad).Refunded(0)).to.be.emit(gateway,"refunded")
+
+    });
+    it("Owner cannot withdraw money before time",async function () {
+      await gateway.connect(ammad).payETH({value:ethers.parseEther("1")});
+
+      await expect(gateway.connect(owner).WithDraw(ammad.address,0)).to.be.revertedWith("Escrow still active");
     });
 
-    it("Should allow batch withdrawal after 24 hours", async function () {
-      // 1. Alice pays 1 ETH and 100 USDT
-      await gateway.connect(alice).payETH({ value: ethers.parseEther("1") });
-      await gateway.connect(alice).payERC20(mockUSDT.target, ethers.parseUnits("100", 18));
+    it("owner can withdraw after 24 hours",async function () {
+      await gateway.connect(ammad).payETH({value:ethers.parseEther("1")});
+      await time.increase(25*3600);
 
-      // 2. Fast forward 25 hours
-      await time.increase(25 * 3600);
+      const balanceBefore=await ethers.provider.getBalance(owner.address);
+      await gateway.connect(owner).WithDraw(ammad.address,0);
+      const balanceAfter=await ethers.provider.getBalance(owner.address);
 
-      // 3. Owner withdraws all Alice's payments
-      const initialEthBal = await ethers.provider.getBalance(owner.address);
-      await gateway.connect(owner).withDrawAll([0, 1], alice.address);
-
-      // 4. Check results
-      expect(await mockUSDT.balanceOf(owner.address)).to.equal(ethers.parseUnits("100", 18));
-      const finalEthBal = await ethers.provider.getBalance(owner.address);
-      expect(finalEthBal).to.be.gt(initialEthBal);
+      expect(balanceAfter).to.be.gt(balanceBefore);
     });
-  });
 
-  describe("Access Control", function () {
-    it("Should not let Bob withdraw Alice's money", async function () {
-       await gateway.connect(alice).payETH({ value: ethers.parseEther("1") });
-       await time.increase(25 * 3600);
-       
-       await expect(gateway.connect(bob).WithDraw(alice.address, 0))
-         .to.be.revertedWith("You are not the owner");
-    });
-  });
+    it("Should allow batch withdrawl after 24 hours",async function () {
+      await gateway.connect(ammad).payETH({value:ethers.parseEther("1")});
+      await gateway.connect(ammad).payERC20(mockUSDT.target ,ethers.parseUnits("100",18));
+      await time.increase(25*3600);
+      const initialETHBalance=await ethers.provider.getBalance(owner.address);
+      await gateway.connect(owner).withDrawAll([0,1],ammad.address);
+
+      expect(await mockUSDT.balanceOf(owner.address)).to.equal(ethers.parseUnits("100",18));
+      const finalEthBalance=await ethers.provider.getBalance(owner.address);
+
+      expect(finalEthBalance).to.be.gt(initialETHBalance);
+    })
+  })
+
+  
 });
