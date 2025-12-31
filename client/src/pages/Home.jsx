@@ -8,7 +8,7 @@ const Home = () => {
   }, [])
 
   return (
-    <div className='min-h-screen bg-gradient-to-br from-blue-100 via-blue-100 to-blue-200 flex items-center justify-center px-4 relative overflow-hidden'>
+    <div className='min-h-screen bg-gradient-to-br from-blue-100 via-blue-400 to-blue-100 flex items-center justify-center px-4 relative overflow-hidden'>
       {/* <div className='absolute inset-0 overflow-hidden'>
       </div> */}
         <ParticlesBackground />
