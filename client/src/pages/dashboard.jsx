@@ -1,11 +1,34 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import SearchBar from '../components/SearchBar.jsx';
 import { Wallet ,DollarSign ,BarChart2 ,BadgeDollarSign,Lock } from 'lucide-react';
 import Withdraw from '../components/withdraw.jsx';
+import { useWallet } from '../context/WalletContext.jsx';
+import { getAdminStats, getCustomerPayment } from '../api/contract.js';
 // total revenue ,  fees , available to  withdrawl , total in escrow , 
 
 const dashboard = () => {
   let labels=[...Array(4)];
+  const{account}=useWallet();
+  const[payment,setPayment]=useState([])
+  console.log(payment);
+  
+  const[stats,setStats]=useState({totalEscrow:0,totalFees:0,totalPayment:0,availableToWithdraw:0 });
+  // console.log(stats);
+  
+  useEffect(()=>{
+    if(!account)return
+    const loadPayment=async()=>{
+      const data=await getCustomerPayment(account)
+      setPayment(data.data || []);
+    }
+    const loadStats=async()=>{
+      const data=await getAdminStats()
+      setStats(data);
+    }
+    loadPayment()
+    loadStats()
+  },[account]);
+
   
   const [active,setActive]=useState("Overview");
   return (
@@ -19,7 +42,7 @@ const dashboard = () => {
           <Wallet className='h-7  text-blue-400 w-7' />
           </div>
           <div className="flex mt-2  flex-row items-center ">
-          <span className='text-6xl font-semibold text-left ' >10000 </span>
+          <span className='text-6xl font-semibold text-left ' >{parseFloat(stats.totalPayment).toFixed(7)} </span>
           <DollarSign className='font-semibold ' />
           </div>
         </div>       
@@ -29,7 +52,7 @@ const dashboard = () => {
           <Lock className='h-7  text-blue-400 w-7' />
           </div>
           <div className="flex mt-2  flex-row items-center ">
-          <span className='text-6xl font-semibold text-left ' >10000 </span>
+          <span className='text-6xl font-semibold text-left ' >{parseFloat(stats.totalEscrow).toFixed(7)} </span>
           <DollarSign className='font-semibold ' />
           </div>
         </div>       
@@ -39,7 +62,7 @@ const dashboard = () => {
           <BadgeDollarSign className='h-7  text-blue-400 w-7' />
           </div>
           <div className="flex mt-2  flex-row items-center ">
-          <span className='text-6xl font-semibold text-left ' >10000 </span>
+          <span className='text-6xl font-semibold text-left ' >{parseFloat(stats.availableToWithdraw).toFixed(7)} </span>
           <DollarSign className='font-semibold ' />
           </div>
         </div>       
@@ -49,7 +72,7 @@ const dashboard = () => {
           <BarChart2 className='h-7  text-blue-400 w-7' />
           </div>
           <div className="flex mt-2  flex-row items-center ">
-          <span className='text-6xl font-semibold text-left ' >10000 </span>
+          <span className='text-6xl font-semibold text-left ' >{parseFloat(stats.totalFees).toFixed(7)} </span>
           <DollarSign className='font-semibold ' />
           </div>
         </div>       
@@ -72,14 +95,22 @@ const dashboard = () => {
           </tr>
         </thead>
         <tbody className='border-t border-zinc-700' >
+          {payment.length===0?(
+            <tr>
+      <td colSpan={6} className='p-3 text-center'>No payments found</td>
+    </tr>
+          ):(
+        payment.map((p,index)=>(
           <tr>
-            <td className='p-3' >001010210201020</td>
-            <td className='p-3' >ETH</td>
-            <td className='p-3' >222</td>
-            <td className='p-3' >2</td>
-            <td className='p-3' >4h 12m</td>
-            <td className='p-3' >Active</td>
+            <td className='p-3' >{account}</td>
+            <td className='p-3' >{p.token}</td>
+            <td className='p-3' >{p.amount}</td>
+            <td className='p-3' >{p.fees}</td>
+            <td className='p-3' >{new Date(p.timestamp*1000).toLocaleString()}</td>
+            <td className='p-3' >{p.refunded?"Refunded":p.withdrawn?"Withdraw":"Active"}</td>
           </tr>
+          ))
+          )}
         </tbody>
        </table>
        ):(

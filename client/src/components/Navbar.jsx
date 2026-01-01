@@ -1,38 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {ethers} from "ethers"
+import { useWallet } from '../context/WalletContext'
+import TestPayButton from './Test'
 const Navbar = () => {
-  const[account , setAccount]=useState(null);
-
-  const connectWallet=async()=>{
-    if(!window.ethereum){
-      alert("install Metamask")
-    }
-
-    try {
-      const accounts =await window.ethereum.request({
-        method:"eth_requestAccounts"
-      })
-      setAccount(accounts[0]);
-      alert("wallet connected")
-    } catch (error) {
-      console.error("Connect Failed",error);
-      
-
-    }
-    }
-
-    useEffect(()=>{
-      if(!window.ethereum)return;
-
-      window.ethereum.on("accountChanged",(accounts)=>{
-        setAccount(accounts[0]||null);
-      })
-      return ()=>{
-        window.ethereum.removeAllListeners("accountChanged")
-      }
-    },[])
- 
+  const {account,connectWallet}=useWallet()
   return (
     <div className='h-20 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-400  justify-between flex p-4 items-center' >
         <div className="flex h-full items-center gap-5 flex-row">
@@ -43,6 +15,7 @@ const Navbar = () => {
         <Link to={"/dashboard"} className='text-lg font-bold hover:bg-blue-50 rounded-md px-2 py-1 ' >dashboard</Link>  
         <Link to={"/about"} className='text-lg font-bold hover:bg-blue-50 rounded-md px-2 py-1 ' >About</Link>
         <button className='text-white bg-zinc-800 rounded-md p-1' onClick={connectWallet} >{account? `${account.slice(0,5)}...${account.slice(-5)}`:`Connect Wallet`}</button>
+        <TestPayButton />
         </div>
     </div>
   )
