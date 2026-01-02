@@ -101,13 +101,13 @@ const dashboard = () => {
     </tr>
           ):(
         payment.map((p,index)=>(
-          <tr>
+          <tr className='border-b-2   border-blue-50' >
             <td className='p-3' >{account}</td>
-            <td className='p-3' >{p.token}</td>
+            <td className='p-3 text-left text-white' ><span className={` px-2 py-1 rounded-md ${p.token=="ETH" ? "bg-blue-400":"bg-green-400"} inline-block`} >{p.token}</span></td>
             <td className='p-3' >{p.amount}</td>
             <td className='p-3' >{p.fees}</td>
             <td className='p-3' >{new Date(p.timestamp*1000).toLocaleString()}</td>
-            <td className='p-3' >{p.refunded?"Refunded":p.withdrawn?"Withdraw":"Active"}</td>
+            <td className='p-3' ><span className={` text-white px-2 py-1 rounded-md ${p.refunded? "bg-red-300":p.withdrawn?"bg-orange-300":"bg-green-400"}`} >{p.refunded?"Refunded":p.withdrawn?"Withdraw":"Active"}</span></td>
           </tr>
           ))
           )}

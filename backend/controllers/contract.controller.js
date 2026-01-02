@@ -6,11 +6,14 @@ import Payment from "../models/Payment.js";
 dotenv.config()
 const abiPath = path.resolve("./Contract.Abi.json"); 
 const abi = JSON.parse(fs.readFileSync(abiPath, "utf8"));
-const CONTRACT_ADDRESS="0x33C487e1B20E3870458738c78eaECF7f833f7f19"
+const CONTRACT_ADDRESS=process.env.CONTRACT_ADDRESS;
 const provider=new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
-const contract=new ethers.Contract(CONTRACT_ADDRESS,abi,provider)
+const wallet=new ethers.Wallet(process.env.PRIVATE_KEY,provider)
+const contract=new ethers.Contract(CONTRACT_ADDRESS,abi,wallet)
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
 const ESCROW_TIME=24*60*60;
-// ruct Payment{
+// sruct Payment{
 //     address token;
 //     uint256 amount;
 //     uint256 fees;
@@ -48,9 +51,7 @@ export const getAdminStats=async(req , res)=>{
         let totalFees=0
         let totalEscrow=0
         let availableToWithdraw=0
-
         const now=Math.floor(Date.now()/1000);
-
         allPayment.forEach((p)=>{
             totalPayment+=parseFloat(p.amount)
             totalFees+=parseFloat(p.fees)
@@ -58,7 +59,6 @@ export const getAdminStats=async(req , res)=>{
             if(!p.withdrawn && !p.refunded){
                 totalEscrow+=parseFloat(p.amount)+parseFloat(p.fees)
             }
-
             if(p.timestamp+24*60*60<=now){
                 availableToWithdraw+=parseFloat(p.amount)+parseFloat(p.fees);
             }
@@ -78,11 +78,11 @@ export const getAdminStats=async(req , res)=>{
 
 export const withdrawSingle=async(req , res)=>{
   try {
-    const {indices,customer}=req.body;
-    if(!customer || !indices){
+    const {index,customer}=req.body;
+    if(!customer || !index){
       return;
     }
-    const tx=await contract.WithDraw(customer , indices);
+    const tx=await contract.WithDraw(customer , index);
     await tx.wait()
     res.json({
       success:true,
@@ -118,21 +118,23 @@ export const batchWithdrawl=async(req ,  res)=>{
   }
 }
 
+
 export const availblePayment=async(req , res)=>{
   try {
     const now=Math.floor(Date.now()/1000);
     const availPayments=await Payment.find({
       refunded:false, 
       withdrawn:false,
-      timestamp:{$lte:now-ESCROW_TIME}
+      timestamp: { $lte:now - ESCROW_TIME }
     })
+    console.log("Sample timestamp:", availPayments[0]?.timestamp);
     const formatted=availPayments.map(p=>({
       customer:p.customer,
       index:p.index,
       token:p.token,
       amount:p.amount, 
       fees:p.fees,
-      symbol:p.token==="0x0"?"ETH":p.token
+      symbol:p.token=== ZERO_ADDRESS ?"ETH":p.token
     }))
     res.json(formatted)
   } catch (error) {
