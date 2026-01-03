@@ -7,6 +7,7 @@ const PaymentSchema=new mongoose.Schema({
     amount:{type:String , required:true},
     fees:{type:String , required:true},
     timestamp:{type:Number, required:true},
+    unlockAt:{type:Number ,required:true},
     refunded:{type:Boolean ,required:false},
     withdrawn:{type:Boolean , required:false},
     txHash:{type:String ,required:true ,unique:true },

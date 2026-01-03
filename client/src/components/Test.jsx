@@ -12,7 +12,7 @@ export default function TestPayButton() {
     const provider = new ethers.BrowserProvider(window.ethereum);
     const signer = await provider.getSigner();
 
-    const txHash = await payETH(signer, "0.00001"); // 0.01 ETH
+    const txHash = await payETH(signer, "0.00001"); 
     console.log("Payment tx hash:", txHash);
     alert("Payment sent! Check your dashboard.");
   };

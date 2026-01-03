@@ -11,22 +11,34 @@ const provider=new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
 const contract=new ethers.Contract(CONTRACT_ADDRESS,abi,provider);
 
 
-
+const ESCROW_TIME=24*60*50;
 export const listenPaymentRecieved=async()=>{
     contract.on("paymentRecieved",async(sender, token,amount, fees, timestamp,event)=>{
         try {
+            
+            const txHash = event.log.transactionHash;
+            const Index = event.log.index;  // Use event.log.index instead of logIndex
+            const blockNumber = event.log.blockNumber;
+            console.log("Index:", Index);
+            console.log("TxHash:", txHash);
+            console.log("Block Number:", blockNumber);
+
             const exists=await Payment.findOne({txHash:event.log.transactionHash});
-        if(exists)return;
+            
+        if(exists){return;}
 
         await Payment.create({
             customer:sender,
             amount:amount.toString(),
-            token:token,
+            token: token === "0x0000000000000000000000000000000000000000" || token === "0x0" ? "ETH" : token,
             fees:fees.toString(),
             timestamp:Number(timestamp),
+            unlockAt:Number(timestamp)+ESCROW_TIME,
             refunded:false,
             withdrawn:false,
-            blockNumber:event.blockNumber
+            blockNumber:blockNumber,
+            txHash:txHash,
+            index:Index
         });
         console.log(("Payment Recieved:",sender,":","Amount:",amount));
         } catch (error) {
