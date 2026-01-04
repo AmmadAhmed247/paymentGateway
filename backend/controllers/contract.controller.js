@@ -225,9 +225,9 @@ export const searchData=async(req , res)=>{
     if(!address){
       res.status(400).json("Address is required")
     }
-    const payments=await Payment.find({
-      customer:address
-    })
+    const payments = await Payment.find({
+      customer: { $regex: new RegExp(address , "i") }
+    });
     res.json({payments})
   } catch (error) {
     res.json(error)
