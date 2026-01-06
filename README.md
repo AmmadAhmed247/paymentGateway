@@ -1,3 +1,8 @@
+Architecture:
+<img width="1247" height="660" alt="image" src="https://github.com/user-attachments/assets/2b6f5d59-ee0d-4143-bf6b-9774512143ad" />
+
+
+
 Non custodial payment gateway that allows merchants to accept ETH and ERC-20 tokens with a built-in 24-hour(changeable) escrow protection. No third party, no middleman 
 Handles native ETH and custom ERC-20 tokens. Batch withdrawal function to save on network fees.
 flow:
