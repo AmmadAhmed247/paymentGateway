@@ -1,8 +1,9 @@
 import Payment from "../models/Payment.js";
-import {ethers} from "ethers"
+import {ethers, parseEther} from "ethers"
 import fs from "fs"
 import path from "path";
 import dotenv from "dotenv"
+import axios from "axios"
 dotenv.config()
 const abiPath = path.resolve("./Contract.Abi.json"); 
 const abi = JSON.parse(fs.readFileSync(abiPath, "utf8"));
@@ -10,27 +11,40 @@ const CONTRACT_ADDRESS=process.env.CONTRACT_ADDRESS
 const provider=new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
 const contract=new ethers.Contract(CONTRACT_ADDRESS,abi,provider);
 
+const erc20Abi=["function symbol() view returns (string)"]
+const getSymbol=async(tokenAddress , provider)=>{
+    if (tokenAddress === "0x0000000000000000000000000000000000000000") return "ETH";
+    const contract=new ethers.Contract(tokenAddress, erc20Abi , provider)
+    return await contract.symbol()
+}
 
-const ESCROW_TIME=24*60*50;
+const fetchETHprice=async()=>{
+    const res=await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd");
+    return res.data;
+}
+
+
+
+const ESCROW_TIME=24*60*60;
 export const listenPaymentRecieved=async()=>{
     contract.on("paymentRecieved",async(sender, token,amount, fees, timestamp,event)=>{
+
         try {
-            
+            const tokenSymbol=await getSymbol(token , provider);            
             const txHash = event.log.transactionHash;
-            const Index = event.log.index;  // Use event.log.index instead of logIndex
-            const blockNumber = event.log.blockNumber;
+            const Index = event.log.index; 
+            const blockNumber = event.log.blockNumber;   
+                
             console.log("Index:", Index);
             console.log("TxHash:", txHash);
-            console.log("Block Number:", blockNumber);
-
+            console.log("Block Number:", blockNumber); 
+                   
             const exists=await Payment.findOne({txHash:event.log.transactionHash});
-            
         if(exists){return;}
-
         await Payment.create({
             customer:sender,
-            amount:amount.toString(),
-            token: token === "0x0000000000000000000000000000000000000000" || token === "0x0" ? "ETH" : token,
+            amount:_amount.toString(),
+            token: tokenSymbol,
             fees:fees.toString(),
             timestamp:Number(timestamp),
             unlockAt:Number(timestamp)+ESCROW_TIME,
@@ -46,7 +60,6 @@ export const listenPaymentRecieved=async()=>{
         }       
     })
 }
-
 export const listenRefunded=()=>{
     contract.on("refunded",async(payer , token ,amount , event)=>{
         try {

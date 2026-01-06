@@ -1,39 +1,53 @@
 import React, { useEffect, useState } from 'react'
+import { SiEthereum } from 'react-icons/si';
 import SearchBar from '../components/SearchBar.jsx';
-import { Wallet, DollarSign, BarChart2, BadgeDollarSign, Lock } from 'lucide-react';
+import { Wallet, DollarSign, BarChart2, BadgeDollarSign, Lock  } from 'lucide-react';
 import Withdraw from '../components/withdraw.jsx';
 import { useWallet } from '../context/WalletContext.jsx';
 import { getAdminStats, getCustomerPayment } from '../api/contract.js';
-import { ethers } from "ethers"
+import { ethers  } from "ethers"
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
 // total revenue ,  fees , available to  withdrawl , total in escrow , 
+const formatEth = (value) => {
+  if (!value) return "0";
+  try {
+    return ethers.formatEther(value.toString());
+  } catch (err) {
+    console.error("formatEth error:", err, value);
+    return "0";
+  }
+};
+
+
 
 const dashboard = () => {
-  let labels = [...Array(4)];
   const { account } = useWallet();
-  const [payment, setPayment] = useState([])
-  const [stats, setStats] = useState({ totalEscrow: 0, totalFees: 0, totalPayment: 0, availableToWithdraw: 0 });
-  // console.log(stats);
-  useEffect(() => {
-    if (!account) return
-    const loadPayment = async () => {
-      const data = await getCustomerPayment(account)
-      setPayment(data.data || []);
-    }
-    const loadStats = async () => {
-      const data = await getAdminStats()
-      setStats(data);
-    }
-    loadPayment()
-    loadStats()
-  }, [account]);
+  const[select,setSelect]=useState("ETH")
+  console.log(select);
+  
 
-
+  const {data:stats }=useQuery({
+    queryKey:["admin-stats"],
+    queryFn:getAdminStats,
+    staleTime:1000,
+  })
+  const{data:paymentsData}=useQuery({
+    queryKey:["payments",account],
+    queryFn:getCustomerPayment,
+    enabled:!!account
+  })
+  const payment = paymentsData?.data || [];
 
   const [active, setActive] = useState("Overview");
   return (
     <div className='flex  flex-col h-screen p-4 '>
       <div className="mt-2"></div>
-      <h1 className='text-5xl  w-fit   p-2 font-roboto   font-bold' >Admin Dashboard</h1>
+      <h1 className='text-5xl  w-fit   p-2 mb-10 font-roboto   font-bold' >Admin Dashboard</h1>
+      <div className="flex mt-2 p-2 absolute  rounded-2xl w-fit gap-2 flex-row  ">
+      <button onClick={()=>setSelect("usd")} className='px-2 top-22 right-1 relative py-1 text-xl bg-blue-200 rounded-2xl' >USD</button>
+      <button onClick={()=>setSelect("eth")} className='px-2 top-22 right-1 relative py-1 text-xl bg-blue-200 rounded-2xl' >ETH</button>
+      </div>
       <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-4 md:grid-cols-2 gap-4  ">
         <div className="h-fit w-full p-2 flex n  flex-col bg-white border border-zinc-300  mt-10 rounded-md">
           <div className="flex border-b  border-zinc-300 flex-row justify-between ">
@@ -41,8 +55,9 @@ const dashboard = () => {
             <Wallet className='h-7  text-blue-400 w-7' />
           </div>
           <div className="flex mt-2  flex-row items-center ">
-            <span className='text-6xl font-semibold text-left ' >{ethers.formatEther(stats.totalPayment)} </span>
-            <DollarSign className='font-semibold ' />
+            <span className='text-6xl font-semibold text-left ' >{formatEth(stats?.totalPayment)} </span>
+            <SiEthereum className="w-12 h-12 text-blue-500" />
+
           </div>
         </div>
         <div className="h-fit w-full p-2 flex n  flex-col bg- border border-zinc-300 mt-10 rounded-md">
@@ -51,8 +66,8 @@ const dashboard = () => {
             <Lock className='h-7  text-blue-400 w-7' />
           </div>
           <div className="flex mt-2  flex-row items-center ">
-            <span className='text-6xl font-semibold text-left ' >{ethers.formatEther(stats.totalEscrow)} </span>
-            <DollarSign className='font-semibold ' />
+            <span className='text-6xl font-semibold text-left ' >{formatEth(stats?.totalEscrow)} </span>
+            <SiEthereum className="w-12 h-12 text-blue-500" />
           </div>
         </div>
         <div className="h-fit w-full p-2 flex n  flex-col border border-zinc-300 bg-white mt-10 rounded-md">
@@ -61,8 +76,8 @@ const dashboard = () => {
             <BadgeDollarSign className='h-7  text-blue-400 w-7' />
           </div>
           <div className="flex mt-2  flex-row items-center ">
-            <span className='text-6xl font-semibold text-left ' >{ethers.formatEther(stats.availableToWithdraw)} </span>
-            <DollarSign className='font-semibold ' />
+            <span className='text-6xl font-semibold text-left ' >{formatEth(stats?.availableToWithdraw)} </span>
+            <SiEthereum className="w-12 h-12 text-blue-500" />
           </div>
         </div>
         <div className="h-fit w-full p-2 flex n  flex-col border border-zinc-300 bg-white mt-10 rounded-md">
@@ -71,8 +86,8 @@ const dashboard = () => {
             <BarChart2 className='h-7  text-blue-400 w-7' />
           </div>
           <div className="flex mt-2  flex-row items-center ">
-            <span className='text-6xl font-semibold text-left ' >{ethers.formatEther(stats.totalFees)} </span>
-            <DollarSign className='font-semibold ' />
+            <span className='text-6xl font-semibold text-left ' >{formatEth(stats?.totalFees)} </span>
+            <SiEthereum className="w-12 h-12 text-blue-500" />
           </div>
         </div>
       </div>
@@ -95,7 +110,7 @@ const dashboard = () => {
             </tr>
           </thead>
           <tbody className='border-t border-zinc-700' >
-            {payment.length === 0 ? (
+            {payment?.length === 0 ? (
               <tr>
                 <td colSpan={6} className='p-3 text-center'>No payments found</td>
               </tr>
